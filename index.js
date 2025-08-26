@@ -10,6 +10,9 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
+// Konstansok
+const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
+
 // Render Environment Variables Debug - Több módszer próbálása
 console.log('🔍 TELJES Environment Variables Debug:');
 console.log('process.env keys:', Object.keys(process.env).filter(key => key.includes('HELIUS') || key.includes('WEBHOOK')));
@@ -33,7 +36,6 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL ||
                            process.env.discord_webhook_url;
 
 const PORT = process.env.PORT || 10000; // Render default port
-const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
 
 // DEBUG: MINDEN environment variable kiírása (biztonságosan)
 console.log('🔍 Environment Variables Detailed Check:');
