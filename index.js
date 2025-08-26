@@ -10,22 +10,91 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// Konfiguráció - Render Environment változókból
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
-const WEBHOOK_URL = process.env.WEBHOOK_URL; 
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+// Render Environment Variables Debug - Több módszer próbálása
+console.log('🔍 TELJES Environment Variables Debug:');
+console.log('process.env keys:', Object.keys(process.env).filter(key => key.includes('HELIUS') || key.includes('WEBHOOK')));
+console.log('All environment variables containing "HELIUS":', Object.keys(process.env).filter(k => k.toLowerCase().includes('helius')));
+
+// Próbáljunk különböző kulcs neveket
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || 
+                      process.env.HELIUS_API_KEY_PROD || 
+                      process.env.helius_api_key ||
+                      process.env.HELIUSAPIKEY ||
+                      process.env.API_KEY;
+
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 
+                   process.env.WEBHOOK_URL_PROD ||
+                   process.env.webhook_url ||
+                   process.env.WEBHOOKURL ||
+                   process.env.URL;
+
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 
+                           process.env.DISCORD_URL ||
+                           process.env.discord_webhook_url;
+
 const PORT = process.env.PORT || 10000; // Render default port
 const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
 
-// Validáció
+// DEBUG: MINDEN environment variable kiírása (biztonságosan)
+console.log('🔍 Environment Variables Detailed Check:');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
+console.log('Raw HELIUS_API_KEY exists:', 'HELIUS_API_KEY' in process.env);
+console.log('Raw WEBHOOK_URL exists:', 'WEBHOOK_URL' in process.env);
+
+// Összes env var név kiírása
+console.log('Available env var names:');
+Object.keys(process.env).sort().forEach(key => {
+  if (key.length < 50) { // Túl hosszú rendszer változók kiszűrése
+    console.log(`  ${key}: ${key.includes('KEY') || key.includes('SECRET') || key.includes('TOKEN') ? '[HIDDEN]' : process.env[key]?.substring(0, 50) + '...'}`);
+  }
+});
+const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
+
+// Validáció és debug - KIBŐVÍTETT
+console.log('🔍 Final Values Check:');
+console.log(`- HELIUS_API_KEY: ${HELIUS_API_KEY ? `${HELIUS_API_KEY.substring(0, 8)}...` : '❌ MISSING/UNDEFINED'}`);
+console.log(`- WEBHOOK_URL: ${WEBHOOK_URL || '❌ MISSING/UNDEFINED'}`);
+console.log(`- DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL ? 'SET' : 'NOT SET'}`);
+console.log(`- PORT: ${PORT}`);
+console.log('─────────────────────────────────');
+
 if (!HELIUS_API_KEY) {
-  console.error('❌ HELIUS_API_KEY environment variable is required!');
-  process.exit(1);
+  console.error('❌ HELIUS_API_KEY environment variable is STILL missing!');
+  console.error('🔧 RENDER DEPLOYMENT STEPS TO FIX:');
+  console.error('1. Go to Render Dashboard');
+  console.error('2. Select your service');
+  console.error('3. Settings → Environment');
+  console.error('4. Add: Key="HELIUS_API_KEY" Value="your_api_key"');
+  console.error('5. Click "Save Changes"');
+  console.error('6. Redeploy the service');
+  console.error('');
+  console.error('🔄 Server will continue running for debugging...');
+  // Ne állítsuk le, hogy debugolni tudjuk
 }
 
 if (!WEBHOOK_URL) {
-  console.error('❌ WEBHOOK_URL environment variable is required!');
-  process.exit(1);
+  console.error('❌ WEBHOOK_URL environment variable is STILL missing!');
+  console.error('Should be: https://your-service-name.onrender.com/webhook');
+  console.error('');
+}
+
+// Render specifikus debug endpoint
+console.log('🌐 Creating debug endpoints for Render...');
+
+// Helius API kulcs teszt
+async function testHeliusAPI() {
+  try {
+    console.log('🧪 Helius API kulcs tesztelése...');
+    const response = await axios.get(
+      `https://api.helius.xyz/v0/addresses/So11111111111111111111111111111111111111112/balances?api-key=${HELIUS_API_KEY}`
+    );
+    console.log('✅ Helius API kulcs működik');
+    return true;
+  } catch (error) {
+    console.error('❌ Helius API kulcs hiba:', error.response?.status, error.response?.data || error.message);
+    return false;
+  }
 }
 
 // Helius kapcsolat
@@ -34,9 +103,18 @@ const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${HEL
 // Token cache a kredit spóroláshoz
 const tokenCache = new Map();
 
-// Webhook regisztrálása Heliusnál - MINDEN LP BURN FIGYELÉSE
+// Webhook regisztrálása Heliusnál - HIBAKERESÉSEKKEL
 async function setupWebhook() {
   try {
+    // Először teszteljük az API kulcsot
+    const apiTest = await testHeliusAPI();
+    if (!apiTest) {
+      throw new Error('Helius API kulcs nem működik - ellenőrizd az API kulcsot');
+    }
+
+    console.log('📡 Webhook regisztrálása Heliusnál...');
+    console.log(`📍 Webhook URL: ${WEBHOOK_URL}`);
+    
     const webhookData = {
       webhookURL: WEBHOOK_URL,
       transactionTypes: ["Any"], // Minden tranzakció típus
@@ -45,6 +123,8 @@ async function setupWebhook() {
       txnStatus: "success" // Csak sikeres tranzakciókat
     };
 
+    console.log('📋 Webhook konfiguráció:', JSON.stringify(webhookData, null, 2));
+
     const response = await axios.post(
       'https://api.helius.xyz/v0/webhooks',
       webhookData,
@@ -52,14 +132,28 @@ async function setupWebhook() {
         headers: {
           'Authorization': `Bearer ${HELIUS_API_KEY}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // 30 másodperc timeout
       }
     );
 
     console.log('✅ Webhook sikeresen regisztrálva:', response.data.webhookID);
     return response.data.webhookID;
   } catch (error) {
-    console.error('❌ Webhook regisztráció hiba:', error.response?.data || error.message);
+    console.error('❌ Webhook regisztráció hiba:');
+    console.error('Status:', error.response?.status);
+    console.error('Data:', JSON.stringify(error.response?.data, null, 2));
+    console.error('Headers:', error.response?.headers);
+    
+    // Részletes hibakeresés
+    if (error.response?.status === 401) {
+      console.error('🚨 401 Unauthorized - Lehetséges okok:');
+      console.error('1. Hibás Helius API kulcs');
+      console.error('2. API kulcs expired');
+      console.error('3. API kulcs nincs webhook jogosultságokkal');
+      console.error('4. Hibás Authorization header formátum');
+    }
+    
     throw error;
   }
 }
@@ -329,11 +423,30 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
-      webhook: '/webhook'
+      webhook: '/webhook',
+      'debug-env': '/debug-env (GET) - Environment variables debug',
+      'register-webhook': '/register-webhook (POST) - Manual webhook registration',
+      'set-env': '/set-env (POST) - Emergency env var setting'
     },
     monitoring: {
       program: RAYDIUM_AMM_V4_PROGRAM,
       description: 'Real-time LP burn detection on Raydium AMM v4'
+    },
+    environment: {
+      heliusApiKey: HELIUS_API_KEY ? `${HELIUS_API_KEY.substring(0, 8)}...` : '❌ MISSING',
+      webhookUrl: WEBHOOK_URL || '❌ MISSING',
+      discordEnabled: !!DISCORD_WEBHOOK_URL,
+      port: PORT
+    },
+    renderDebugging: {
+      message: 'If environment variables are missing:',
+      steps: [
+        '1. Visit /debug-env to see what Render has',
+        '2. Go to Render Dashboard → Your Service → Settings → Environment',
+        '3. Add HELIUS_API_KEY and WEBHOOK_URL',
+        '4. Save Changes and Redeploy',
+        '5. Or use /set-env temporarily'
+      ]
     }
   });
 });
@@ -357,22 +470,28 @@ async function startServer() {
     console.log(`🌐 Webhook URL: ${WEBHOOK_URL}`);
     console.log(`🔗 Discord notifications: ${DISCORD_WEBHOOK_URL ? 'Enabled' : 'Disabled'}`);
     
+    // Server indítás ELŐBB
+    app.listen(PORT, () => {
+      console.log(`✅ Server fut a porton: ${PORT}`);
+    });
+    
+    // Kis várakozás majd webhook regisztrálás
+    console.log('⏳ 5 másodperc várakozás a server indulására...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
     // Webhook regisztrálás
     console.log('📡 Helius webhook regisztrálása...');
     await setupWebhook();
     
-    // Server start
-    app.listen(PORT, () => {
-      console.log(`✅ Server fut a porton: ${PORT}`);
-      console.log(`🔥 LP burn monitoring aktív!`);
-      console.log(`💰 Várható napi kredit használat: 15,000-50,000`);
-      console.log(`📈 Becsült LP burn események: 500-2000/nap`);
-      console.log('────────────────────────────────────────');
-    });
+    console.log(`🔥 LP burn monitoring aktív!`);
+    console.log(`💰 Várható napi kredit használat: 15,000-50,000`);
+    console.log(`📈 Becsült LP burn események: 500-2000/nap`);
+    console.log('────────────────────────────────────────');
     
   } catch (error) {
     console.error('❌ Server indítási hiba:', error);
-    process.exit(1);
+    console.log('🔄 Server továbbra is fut, webhook regisztrációt újra lehet próbálni...');
+    // Ne állítsuk le a szervert, csak a webhook regisztráció nem sikerült
   }
 }
 
