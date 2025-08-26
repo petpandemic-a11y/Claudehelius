@@ -7,7 +7,7 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
-// Ellenőrizzük a Helius webhook aláírást
+// Helius webhook signature ellenőrzés
 function verifyHeliusSignature(req) {
     const secret = process.env.HELIUS_WEBHOOK_SECRET;
     const signature = req.headers["x-helius-signature"];
@@ -31,14 +31,14 @@ app.post("/webhook", (req, res) => {
 
     const events = req.body;
 
-    // Biztonság kedvéért ellenőrizzük, hogy van-e adat
+    // Ha nincs adat a webhookban
     if (!Array.isArray(events)) {
-        console.log("⚠️ Üres vagy hibás webhook payload");
+        console.log("⚠️ Hibás vagy üres webhook payload");
         return res.status(200).send("No events");
     }
 
     for (const e of events) {
-        // Csak LP Burn tranzakciókat figyelünk
+        // Csak TokenBurn típusú eseményeket figyelünk
         const txType = e.type || "unknown";
         if (txType !== "TOKEN_BURN") continue;
 
@@ -46,7 +46,7 @@ app.post("/webhook", (req, res) => {
         const lpToken = e.tokenTransfers?.[0]?.mint || "UNKNOWN";
         const burnedAmount = e.tokenTransfers?.[0]?.tokenAmount || 0;
 
-        console.log("🔥 LP Burn esemény észlelve!");
+        console.log("🔥 LP Burn esemény!");
         console.log("Signature:", txSig);
         console.log("LP Token cím:", lpToken);
         console.log("Égetett mennyiség:", burnedAmount);
@@ -56,7 +56,7 @@ app.post("/webhook", (req, res) => {
     res.status(200).send("OK");
 });
 
-// Render indítás
+// Render szerver indítása
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`🚀 Webhook szerver fut a ${PORT} porton`);
