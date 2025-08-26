@@ -1,3 +1,7 @@
+// Raydium LP Burn Monitor - index.js
+// Teljes LP burn monitoring Helius webhook-okkal
+// Minden LP burn esemény élő figyelése a Solana Raydium AMM v4 programon
+
 require('dotenv').config();
 const express = require('express');
 const { Connection, PublicKey } = require('@solana/web3.js');
@@ -128,32 +132,6 @@ function isLPBurnTransaction(transaction) {
   }
   
   return false;
-} (első 8 bájt)
-      if (instructionData && (
-        instructionData.startsWith('0x02') || // Withdraw instruction
-        instructionData.startsWith('0x09') || // Remove liquidity
-        instructionData.includes('close') ||
-        instructionData.includes('burn')
-      )) {
-        return true;
-      }
-    }
-  }
-  
-  // Token account változások ellenőrzése
-  const accountKeys = transaction.accountKeys;
-  const preBalances = transaction.meta?.preBalances || [];
-  const postBalances = transaction.meta?.postBalances || [];
-  
-  // Nagyobb balance csökkenés = potenciális LP burn
-  for (let i = 0; i < preBalances.length; i++) {
-    const balanceChange = preBalances[i] - postBalances[i];
-    if (balanceChange > 1000000) { // 0.001 SOL küszöb
-      return true;
-    }
-  }
-  
-  return false;
 }
 
 // Token információk lekérése (cachelés a kredit spórolás érdekében)
@@ -251,7 +229,7 @@ async function processLPBurn(transaction) {
   console.log(`Solscan: https://solscan.io/tx/${signature}`);
   console.log(`─────────────────────────────────`);
   
-  // Itt küldhetsz Discord/Telegram/Slack notifikációt
+  // Notification küldés
   await sendNotification({
     signature,
     timestamp,
@@ -310,45 +288,114 @@ async function sendNotification(burnData) {
 app.post('/webhook', async (req, res) => {
   try {
     const transactions = req.body;
+    console.log(`📦 Webhook fogadva: ${transactions.length} tranzakció`);
     
+    let burnCount = 0;
     for (const transaction of transactions) {
       // LP burn ellenőrzés
       if (isLPBurnTransaction(transaction)) {
+        burnCount++;
         await processLPBurn(transaction);
       }
     }
     
+    if (burnCount > 0) {
+      console.log(`🔥 ${burnCount} LP burn esemény feldolgozva`);
+    }
+    
     res.status(200).send('OK');
   } catch (error) {
-    console.error('Webhook processing error:', error);
+    console.error('❌ Webhook processing error:', error);
     res.status(500).send('Error');
   }
 });
 
-// Health check
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    monitoring: 'Raydium LP Burns'
+    monitoring: 'Raydium LP Burns',
+    program: RAYDIUM_AMM_V4_PROGRAM,
+    cacheSize: tokenCache.size
   });
 });
 
-// Server indítás
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`🚀 Raydium LP Burn Monitor running on port ${PORT}`);
-  console.log(`📡 Setting up Helius webhook...`);
-  
-  // Webhook regisztrálás
-  await setupWebhook();
-  
-  console.log(`✅ Monitor active for LP burns on Raydium AMM v4`);
-  console.log(`💰 Estimated daily credit usage: 5-15 credits`);
+// Root endpoint info
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Raydium LP Burn Monitor',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      webhook: '/webhook'
+    },
+    monitoring: {
+      program: RAYDIUM_AMM_V4_PROGRAM,
+      description: 'Real-time LP burn detection on Raydium AMM v4'
+    }
+  });
 });
+
+// Error handler middleware
+app.use((error, req, res, next) => {
+  console.error('❌ Unhandled error:', error);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Server indítás
+async function startServer() {
+  try {
+    console.log('🚀 Raydium LP Burn Monitor indítása...');
+    console.log(`📊 Monitoring program: ${RAYDIUM_AMM_V4_PROGRAM}`);
+    console.log(`🌐 Webhook URL: ${WEBHOOK_URL}`);
+    console.log(`🔗 Discord notifications: ${DISCORD_WEBHOOK_URL ? 'Enabled' : 'Disabled'}`);
+    
+    // Webhook regisztrálás
+    console.log('📡 Helius webhook regisztrálása...');
+    await setupWebhook();
+    
+    // Server start
+    app.listen(PORT, () => {
+      console.log(`✅ Server fut a porton: ${PORT}`);
+      console.log(`🔥 LP burn monitoring aktív!`);
+      console.log(`💰 Várható napi kredit használat: 15,000-50,000`);
+      console.log(`📈 Becsült LP burn események: 500-2000/nap`);
+      console.log('────────────────────────────────────────');
+    });
+    
+  } catch (error) {
+    console.error('❌ Server indítási hiba:', error);
+    process.exit(1);
+  }
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down LP burn monitor...');
+  console.log('🛑 SIGTERM jel fogadva, leállás...');
   process.exit(0);
 });
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT jel fogadva, leállás...');
+  process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+// Server indítás
+startServer();
