@@ -1,7 +1,3 @@
-// Raydium LP Burn Monitor - index.js
-// Teljes LP burn monitoring Helius webhook-okkal
-// Minden LP burn esemény élő figyelése a Solana Raydium AMM v4 programon
-
 require('dotenv').config();
 const express = require('express');
 const { Connection, PublicKey } = require('@solana/web3.js');
@@ -356,52 +352,3 @@ process.on('SIGTERM', () => {
   console.log('🛑 Shutting down LP burn monitor...');
   process.exit(0);
 });
-
-/* 
-TELJES LP BURN MONITORING - MINDEN ESEMÉNY
-
-Ez a konfiguráció:
-
-📊 FIGYELÉSI HATÓKÖR:
-- ✅ MINDEN Raydium AMM v4 LP pool (~25,000+ token pár)
-- ✅ MINDEN LP burn/withdraw/remove művelet
-- ✅ Kis és nagy burn-ök egyaránt
-- ✅ Minden token (meme coin, stablecoin, blue chip)
-
-⚡ VÁRHATÓ FORGALOM:
-- ~50,000-200,000 webhook hívás/nap
-- ~500-2000 LP burn esemény/nap (becsült)
-- ~15,000-50,000 Helius kredit/nap
-
-🎯 DETECTION MÓDSZEREK:
-1. Raydium instruction analysis (withdraw, remove_liquidity, close)
-2. Token balance csökkenés tracking
-3. SOL balance változás monitoring  
-4. LP pool account pattern recognition
-
-🔔 MINDEN LP BURN TARTALMAZZA:
-- Burned token neve, szimbóluma, mennyisége
-- Pool információk
-- Transaction signature és timestamp
-- Solscan link
-- Real-time Discord/Telegram notifikáció
-
-HASZNÁLAT:
-
-1. npm install express @solana/web3.js axios
-
-2. Környezeti változók:
-   - HELIUS_API_KEY: Helius API kulcs
-   - WEBHOOK_URL: Publikus webhook endpoint
-
-3. Discord webhook URL beállítás (opcionális)
-
-4. Futtatás: node lp-burn-monitor.js
-
-⚠️ FONTOS: 
-- Nagy kredit fogyasztás várható (15k-50k/nap)
-- Stabil internet kapcsolat szükséges
-- Webhook endpoint 24/7 elérhetősége kell
-
-Ez a setup MINDEN LP burn-t észlel a Raydium-on!
-*/
