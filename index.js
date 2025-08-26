@@ -51,7 +51,6 @@ Object.keys(process.env).sort().forEach(key => {
     console.log(`  ${key}: ${key.includes('KEY') || key.includes('SECRET') || key.includes('TOKEN') ? '[HIDDEN]' : process.env[key]?.substring(0, 50) + '...'}`);
   }
 });
-const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
 
 // Validáció és debug - KIBŐVÍTETT
 console.log('🔍 Final Values Check:');
@@ -84,9 +83,18 @@ if (!WEBHOOK_URL) {
 // Render specifikus debug endpoint
 console.log('🌐 Creating debug endpoints for Render...');
 
+// Helius kapcsolat
+const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY || 'dummy'}`);
+
+// Token cache a kredit spóroláshoz
+const tokenCache = new Map();
+
 // Helius API kulcs teszt
 async function testHeliusAPI() {
   try {
+    if (!HELIUS_API_KEY) {
+      throw new Error('No API key available');
+    }
     console.log('🧪 Helius API kulcs tesztelése...');
     const response = await axios.get(
       `https://api.helius.xyz/v0/addresses/So11111111111111111111111111111111111111112/balances?api-key=${HELIUS_API_KEY}`
@@ -98,12 +106,6 @@ async function testHeliusAPI() {
     return false;
   }
 }
-
-// Helius kapcsolat
-const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`);
-
-// Token cache a kredit spóroláshoz
-const tokenCache = new Map();
 
 // Webhook regisztrálása Heliusnál - HIBAKERESÉSEKKEL
 async function setupWebhook() {
@@ -233,6 +235,16 @@ function isLPBurnTransaction(transaction) {
 // Token információk lekérése (cachelés a kredit spórolás érdekében)
 async function getTokenInfo(mintAddress) {
   try {
+    if (!HELIUS_API_KEY) {
+      return {
+        name: 'Unknown Token (No API Key)',
+        symbol: 'UNKNOWN',
+        mint: mintAddress,
+        decimals: 9,
+        logoURI: null
+      };
+    }
+
     // Cache ellenőrzés
     if (tokenCache.has(mintAddress)) {
       return tokenCache.get(mintAddress);
@@ -380,6 +392,88 @@ async function sendNotification(burnData) {
   }
 }
 
+// Render Debug endpoint - Environment Variables
+app.get('/debug-env', (req, res) => {
+  res.json({
+    message: 'Render Environment Debug',
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    platform: process.platform,
+    environmentVariables: {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      heliusApiKeyExists: !!process.env.HELIUS_API_KEY,
+      heliusApiKeyLength: process.env.HELIUS_API_KEY?.length || 0,
+      heliusApiKeyPreview: process.env.HELIUS_API_KEY ? `${process.env.HELIUS_API_KEY.substring(0, 8)}...` : 'NOT_FOUND',
+      webhookUrlExists: !!process.env.WEBHOOK_URL,
+      webhookUrl: process.env.WEBHOOK_URL || 'NOT_FOUND',
+      discordWebhookExists: !!process.env.DISCORD_WEBHOOK_URL,
+      allEnvKeys: Object.keys(process.env).filter(key => 
+        key.includes('HELIUS') || 
+        key.includes('WEBHOOK') || 
+        key.includes('DISCORD') ||
+        key === 'PORT' ||
+        key === 'NODE_ENV'
+      ).sort()
+    },
+    renderSpecific: {
+      serviceUrl: `${req.protocol}://${req.get('host')}`,
+      expectedWebhookUrl: `${req.protocol}://${req.get('host')}/webhook`,
+      headers: req.headers
+    }
+  });
+});
+
+// Manual Environment Set endpoint (emergency)
+app.post('/set-env', (req, res) => {
+  const { heliusApiKey, webhookUrl } = req.body;
+  
+  if (heliusApiKey) {
+    process.env.HELIUS_API_KEY = heliusApiKey;
+    console.log('⚠️ Manual HELIUS_API_KEY set via API (TEMPORARY!)');
+  }
+  
+  if (webhookUrl) {
+    process.env.WEBHOOK_URL = webhookUrl;
+    console.log('⚠️ Manual WEBHOOK_URL set via API (TEMPORARY!)');
+  }
+  
+  res.json({ 
+    success: true, 
+    message: 'Environment variables set temporarily',
+    note: 'This is temporary - add them properly in Render Dashboard'
+  });
+});
+
+// Manual webhook regisztrációs endpoint (hibakereséshez)
+app.post('/register-webhook', async (req, res) => {
+  try {
+    if (!process.env.HELIUS_API_KEY) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'HELIUS_API_KEY still missing - check Render environment variables',
+        instructions: [
+          '1. Go to Render Dashboard',
+          '2. Your service → Settings → Environment',
+          '3. Add HELIUS_API_KEY with your actual API key',
+          '4. Click Save Changes',
+          '5. Redeploy service'
+        ]
+      });
+    }
+    
+    console.log('🔄 Manual webhook regisztráció...');
+    const webhookId = await setupWebhook();
+    res.json({ success: true, webhookId, message: 'Webhook sikeresen regisztrálva!' });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      details: error.response?.data 
+    });
+  }
+});
+
 // Webhook endpoint
 app.post('/webhook', async (req, res) => {
   try {
@@ -482,12 +576,17 @@ async function startServer() {
     await new Promise(resolve => setTimeout(resolve, 5000));
     
     // Webhook regisztrálás
-    console.log('📡 Helius webhook regisztrálása...');
-    await setupWebhook();
+    if (HELIUS_API_KEY && WEBHOOK_URL) {
+      console.log('📡 Helius webhook regisztrálása...');
+      await setupWebhook();
+      
+      console.log(`🔥 LP burn monitoring aktív!`);
+      console.log(`💰 Várható napi kredit használat: 15,000-50,000`);
+      console.log(`📈 Becsült LP burn események: 500-2000/nap`);
+    } else {
+      console.log('⚠️ Environment variables hiányoznak, webhook regisztráció kihagyva');
+    }
     
-    console.log(`🔥 LP burn monitoring aktív!`);
-    console.log(`💰 Várható napi kredit használat: 15,000-50,000`);
-    console.log(`📈 Becsült LP burn események: 500-2000/nap`);
     console.log('────────────────────────────────────────');
     
   } catch (error) {
