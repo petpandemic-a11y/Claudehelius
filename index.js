@@ -10,11 +10,11 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// Konfiguráció - Environment változókból
+// Konfiguráció - Render Environment változókból
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const WEBHOOK_URL = process.env.WEBHOOK_URL; 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // Render default port
 const RAYDIUM_AMM_V4_PROGRAM = 'RVKd61ztZW9njDq5E7Yh5b2bb4a6JjAwjhH38GZ3oN7';
 
 // Validáció
