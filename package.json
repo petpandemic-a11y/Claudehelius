@@ -1,7 +1,7 @@
 {
-  "name": "solana-liquidity-burn",
+  "name": "claudehelius",
   "version": "1.0.0",
-  "description": "Solana LP Burn notifier bot",
+  "description": "Telegram bot for tracking Solana Raydium LP burns via Helius webhook",
   "type": "module",
   "main": "index.js",
   "scripts": {
