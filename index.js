@@ -1,5 +1,4 @@
 import express from "express";
-import axios from "axios";
 import dotenv from "dotenv";
 import TelegramBot from "node-telegram-bot-api";
 
@@ -11,21 +10,24 @@ app.use(express.json());
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
 const chatId = process.env.TELEGRAM_CHAT_ID;
 
-// Webhook endpoint Helius számára
+// Webhook endpoint: Helius ide küldi a tranzakciós adatokat
 app.post("/webhook", async (req, res) => {
   try {
     const data = req.body[0];
 
     if (!data) {
-      return res.status(400).send("Missing webhook data");
+      return res.status(400).send("Webhook payload missing");
     }
 
+    // Alap adatok kinyerése a webhookból
     const signature = data.signature;
     const solAmount = (data.nativeTransfers?.[0]?.amount || 0) / 1_000_000_000;
     const tokenMint = data.tokenTransfers?.[0]?.mint || "Unknown";
     const tokenSymbol = data.tokenTransfers?.[0]?.tokenSymbol || "UNKNOWN";
     const amount = data.tokenTransfers?.[0]?.tokenAmount || 0;
+    const blockTime = data.blockTime ? new Date(data.blockTime * 1000).toLocaleString("hu-HU") : "Ismeretlen";
 
+    // Solscan link generálás
     const solscanUrl = `https://solscan.io/tx/${signature}`;
 
     // Telegram üzenet formázás
@@ -37,7 +39,7 @@ app.post("/webhook", async (req, res) => {
 🔥 Égetett tokens: ${amount.toLocaleString()}
 💎 SOL égetve: ${solAmount} SOL
 📊 Market Cap: N/A
-🗓 Időpont: ${new Date(data.blockTime * 1000).toLocaleString("hu-HU")}
+🗓 Időpont: ${blockTime}
 
 ✅ TELJES MEME/SOL LP ELÉGETVE!
 🛡 ${solAmount} SOL biztosan elégetve
@@ -48,7 +50,7 @@ app.post("/webhook", async (req, res) => {
 ⚠️ DYOR: Mindig végezz saját kutatást!
 `;
 
-    // Telegram értesítés
+    // Telegram értesítés küldése
     await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
 
     console.log("✅ LP burn értesítés kiküldve Telegramra");
@@ -61,4 +63,4 @@ app.post("/webhook", async (req, res) => {
 
 // Szerver indítása
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server fut a ${PORT} porton`));
+app.listen(PORT, () => console.log(`🚀 ClaudeHelius fut a ${PORT} porton`));
